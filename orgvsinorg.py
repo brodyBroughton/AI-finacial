@@ -55,7 +55,8 @@ def model_init():
 def fetch_item2(ticker: str, use_cache: bool = True):
     """Fetch Item 2 content either from cache or directly via EDGAR."""
 
-    set_identity("jacob casey jacobrcasey135@gmail.com")
+    user_agent = os.environ.get("SEC_USER_AGENT", "jacob casey jacobrcasey135@gmail.com")
+    set_identity(user_agent)
 
     if use_cache:
         cached = cache_fetcher(ticker)

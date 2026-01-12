@@ -1,6 +1,7 @@
 """Fetch and summarize SEC company facts for one ticker."""
 
 import json
+import os
 import re
 import requests
 
@@ -9,11 +10,9 @@ z = 0
 y = 0
 failed = 0
 failed_list = []
-# The SEC mandates descriptive User-Agent strings for scripted access.
-headers = {
-    "User-Agent": "jo boulement jo@gmx.at",
-    "Accept-Encoding": "gzip, deflate",
-}
+DEFAULT_USER_AGENT = "jo boulement jo@gmx.at"
+SEC_TICKERS_URL = "https://www.sec.gov/files/company_tickers.json"
+response_tickers = None
 
 def to_10_digits(n) -> str:
     """Return the zero-padded string format the SEC expects for CIKs."""
@@ -26,16 +25,28 @@ def to_10_digits(n) -> str:
     return s.zfill(10)
 
 payload = {}
-tickers_url = "https://www.sec.gov/files/company_tickers.json"
 
-
-response_tickers = requests.request("GET", tickers_url, headers=headers, data=payload)
-
-response_tickers = response_tickers.text
-response_tickers = response_tickers.lower()
-response_tickers = json.loads(response_tickers)
 rev_quarter_year = []
 rev_num = []
+
+def sec_headers() -> dict:
+    """Return SEC headers, using SEC_USER_AGENT when provided."""
+
+    user_agent = os.environ.get("SEC_USER_AGENT", DEFAULT_USER_AGENT)
+    return {
+        "User-Agent": user_agent,
+        "Accept-Encoding": "gzip, deflate",
+    }
+
+def load_tickers() -> dict:
+    """Fetch and cache the SEC ticker-to-CIK mapping."""
+
+    global response_tickers
+    if response_tickers is None:
+        response = requests.request("GET", SEC_TICKERS_URL, headers=sec_headers(), data=payload)
+        response.raise_for_status()
+        response_tickers = json.loads(response.text.lower())
+    return response_tickers
 
 def add_q(json: dict, year: int, value: int | float, quarter: str):
     """Create the nested ``years`` structure if it does not exist."""
@@ -422,6 +433,8 @@ def run_facts_lookup(ticker: str) -> dict:
     if not user_input:
         return {}
 
+    response_tickers = load_tickers()
+
     # ``company_tickers.json`` includes every CIK; scan until we locate the
     # requested symbol so we can construct the API URL below.
     cik = None
@@ -436,10 +449,9 @@ def run_facts_lookup(ticker: str) -> dict:
         return {}
 
     url = f"https://data.sec.gov/api/xbrl/companyfacts/CIK{cik}.json"
-    response = requests.request("GET", url, headers=headers, data=payload)
-    response = response.text
-    response = response.lower()
-    response = json.loads(response)
+    response = requests.request("GET", url, headers=sec_headers(), data=payload)
+    response.raise_for_status()
+    response = json.loads(response.text.lower())
 
     eps_diluted = response['facts']['us-gaap']['earningspersharediluted']['units']['usd/shares']
     operating_cashflow = response['facts']['us-gaap']['netcashprovidedbyusedinoperatingactivities']['units']['usd']
