@@ -2,7 +2,6 @@
 
 import json
 import re
-
 import requests
 
 
@@ -472,6 +471,7 @@ def run_facts_lookup(ticker: str) -> dict:
         "revenue": revenue_json,
     }
 
-
+# Temporary printing for testing
 if __name__ == "__main__":
-    print(run_facts_lookup("aapl"))
+    result = run_facts_lookup("aapl")
+    print(json.dumps(result, indent=2, sort_keys=True))

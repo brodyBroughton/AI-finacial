@@ -364,4 +364,4 @@ def run_orgvsinorg(ticker: str, use_cache: bool = True) -> dict:
 
 
 if __name__ == "__main__":
-    print(run_orgvsinorg("aapl", use_cache=True))
+    print(run_orgvsinorg("rddt", use_cache=True))

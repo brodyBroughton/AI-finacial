@@ -1,0 +1,27 @@
+{
+    "company name": "Reddit, Inc.",
+    "headline result": "Total revenue increased materially year-over-year \u2014 revenue was $584,911 (in thousands) for the three months ended September 30, 2025, up 68% YoY, and $1,476,899 (in thousands) for the nine months ended September 30, 2025, up 69% YoY. The increase was driven primarily by organic growth in advertising (higher impressions, pricing, and engagement from product initiatives and marketing), with an additional inorganic uplift from content licensing agreements executed in 2024.",
+    "what drove the revenue change": "Primary drivers were (1) increased advertising revenue driven by an increase in impressions delivered and, to a lesser extent, pricing \u2014 the company states growth was \"due primarily to an increase in advertising revenue driven by an increase in impressions delivered, and to a lesser extent, an increase in pricing.\" (three months ended September 30, 2025); (2) higher user engagement and reach supporting ad monetization (DAUq = 116.0 million, up 19% YoY for the three months ended September 30, 2025); and (3) incremental other revenue from content licensing agreements executed in 2024 that increased other revenue in the nine months ended September 30, 2025. Supporting quotes and numbers: \"Revenue was $584.9 million for the three months ended September 30, 2025, an increase of 68% year over year\" (note: $584,911 shown in the tables is in thousands) and \"In the nine months ended September 30, 2025, we recorded revenue of $1.5 billion, as compared to revenue of $0.9 billion for the nine months ended September 30, 2024, representing an increase of 69% compared to the prior year period.\" (nine months ended September 30, 2025). Additional supporting operational drivers: \"product initiatives, particularly machine translation, and relatedly, third-party search engine and algorithm changes, as well as marketing\" (three months ended September 30, 2025).",
+    "revenue streams and growth type": [
+        {
+            "revenue stream": "sale of advertising on our mobile applications and website",
+            "driver": "Majority driver \u2014 Advertising revenue increased due to higher impressions delivered, higher pricing, and higher engagement (more DAUs). Supporting quotes/numbers from the filing: \"Revenue was $584,911 (in thousands) for the three months ended September 30, 2025, an increase of 68% year over year\" (three months ended September 30, 2025). \"In the nine months ended September 30, 2025, we recorded revenue of $1.5 billion, as compared to revenue of $0.9 billion for the nine months ended September 30, 2024, representing an increase of 69% compared to the prior year period.\" (nine months ended September 30, 2025) The company explicitly attributes the growth: \"The growth in revenue was due primarily to an increase in advertising revenue driven by an increase in impressions delivered, and to a lesser extent, an increase in pricing.\" (three months ended September 30, 2025). Operational user metrics supporting advertising growth: \"DAUq were 116.0 million for the three months ended September 30, 2025, an increase of 19% year over year\" and \"ARPU was $5.04 for the three months ended September 30, 2025, an increase of 41% year over year.\" (three months ended September 30, 2025).",
+            "organic or inorganic": "Organic \u2014 recurring increases from higher user activity (DAUq growth), impressions, and pricing, plus product and marketing initiatives (e.g., \"machine translation\" and search/algorithm changes) that expanded reach and monetization."
+        },
+        {
+            "revenue stream": "content licensing",
+            "driver": "Secondary contributor \u2014 the filing notes an increase in other revenue driven by content licensing agreements executed in 2024: \"other revenue increased during the nine months ended September 30, 2025 as a result of content licensing agreements executed in 2024.\" (nine months ended September 30, 2025). This produced incremental revenue within the nine-month period contribution to the overall 69% nine-month revenue increase to $1,476,899 (in thousands) vs $872,498 (in thousands) for the nine months ended September 30, 2024.",
+            "organic or inorganic": "Inorganic (primarily contractual/non-recurring lift) \u2014 described as the result of content licensing agreements executed in 2024 that increased other revenue during the nine months ended September 30, 2025."
+        },
+        {
+            "revenue stream": "Reddit Premium subscriptions",
+            "driver": "Recurring subscription stream recognized ratably: \"We recognize Reddit Premium subscription revenue ratably over the subscription period, which is generally less than one year.\" The filing does not indicate material change or a material dollar contribution for the periods presented.",
+            "organic or inorganic": "Organic \u2014 recurring subscription revenue; no material one-time change reported in the periods presented."
+        },
+        {
+            "revenue stream": "products within our user economy (Reddit Gold and Collectible Avatars)",
+            "driver": "Minimal/immaterial contribution: \"Revenue from Reddit Gold and Collectible Avatars was immaterial for the periods presented.\" No meaningful change or dollar amount provided.",
+            "organic or inorganic": "Organic but immaterial \u2014 recurring user-economy purchases are ongoing but not material to reported revenue in the periods presented."
+        }
+    ]
+}
