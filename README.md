@@ -10,7 +10,7 @@ requires a Bearer token on every request.
 - Required environment variables:
   - `OPENAI_API_KEY`
   - `GOOGLE_API_KEY`
-  - `PYTHON_API_TOKEN`
+  - `PYTHON_API_TOKEN` (any strong random string you generate)
 - Optional environment variable:
   - `SEC_USER_AGENT` (defaults to the existing in-code SEC user agent string)
 
@@ -50,6 +50,7 @@ Authorization: Bearer <PYTHON_API_TOKEN>
 ```
 
 Missing or invalid tokens return HTTP 401.
+Generate a token however you like (for example, `python -c "import secrets; print(secrets.token_urlsafe(32))"`), set it in `PYTHON_API_TOKEN`, and use the same value in your `Authorization` header.
 
 ## API
 

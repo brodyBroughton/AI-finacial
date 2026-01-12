@@ -1,6 +1,7 @@
 """FastAPI service for financial analysis workflows."""
 
 import os
+from dotenv import load_dotenv
 from fastapi import Depends, FastAPI, Header, HTTPException, status
 from fastapi.encoders import jsonable_encoder
 from pydantic import BaseModel, ConfigDict, Field
@@ -15,6 +16,7 @@ app = FastAPI(title="AI Financial Service")
 def require_env() -> None:
     """Ensure required environment variables are set."""
 
+    load_dotenv()
     required = ("OPENAI_API_KEY", "GOOGLE_API_KEY", "PYTHON_API_TOKEN")
     missing = [key for key in required if not os.environ.get(key)]
     if missing:
