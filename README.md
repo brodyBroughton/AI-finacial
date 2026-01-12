@@ -113,3 +113,18 @@ curl -X POST http://localhost:8000/analysis/insights \
   -H "Content-Type: application/json" \
   -d '{"ticker":"aapl","useCache":true}'
 ```
+
+## Smoke test script
+
+Run the included smoke test script after the API server is running:
+
+```bash
+export PYTHON_API_TOKEN="local-dev-token"
+./scripts/smoke_test.sh
+```
+
+You can point it at a different host/port by setting `API_BASE_URL`, e.g.:
+
+```bash
+API_BASE_URL="http://localhost:8000" ./scripts/smoke_test.sh
+```
