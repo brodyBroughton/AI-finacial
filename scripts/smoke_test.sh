@@ -1,6 +1,13 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+if [[ -f ".env" ]]; then
+  set -a
+  # shellcheck disable=SC1091
+  source .env
+  set +a
+fi
+
 API_BASE_URL="${API_BASE_URL:-http://localhost:8000}"
 
 if [[ -z "${PYTHON_API_TOKEN:-}" ]]; then

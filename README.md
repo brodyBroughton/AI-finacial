@@ -13,6 +13,7 @@ requires a Bearer token on every request.
   - `PYTHON_API_TOKEN` (any strong random string you generate)
 - Optional environment variable:
   - `SEC_USER_AGENT` (defaults to the existing in-code SEC user agent string)
+  - `API_BASE_URL` (optional default for the smoke test script)
 
 ## Run locally
 
@@ -25,6 +26,7 @@ export OPENAI_API_KEY="sk-..."
 export GOOGLE_API_KEY="AIza..."
 export PYTHON_API_TOKEN="local-dev-token"
 export SEC_USER_AGENT="your name you@example.com"
+export API_BASE_URL="http://localhost:8000"
 
 uvicorn app:app --host 0.0.0.0 --port 8000
 ```
@@ -120,6 +122,7 @@ Run the included smoke test script after the API server is running:
 
 ```bash
 export PYTHON_API_TOKEN="local-dev-token"
+export API_BASE_URL="http://localhost:8000"
 ./scripts/smoke_test.sh
 ```
 
@@ -128,3 +131,7 @@ You can point it at a different host/port by setting `API_BASE_URL`, e.g.:
 ```bash
 API_BASE_URL="http://localhost:8000" ./scripts/smoke_test.sh
 ```
+
+The smoke test script will also load `.env` if it exists, so you can keep
+`PYTHON_API_TOKEN` and `API_BASE_URL` there instead of exporting them in every
+terminal session.
