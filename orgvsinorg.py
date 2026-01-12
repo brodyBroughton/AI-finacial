@@ -1,38 +1,24 @@
-"""LangGraph workflow that analyzes 10-Q Item 2 data."""
+"""Analyze 10-Q Item 2 data and return structured insights."""
 
-from edgar import Company, set_identity
-from langgraph.graph import StateGraph, START, END
-from langgraph.graph.message import add_messages
+from edgar import set_identity
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_openai import ChatOpenAI
 from pydantic import BaseModel, Field
-from langchain_core.prompts import PromptTemplate
 from langchain_core.messages import HumanMessage
-from langgraph.types import Command
 from dotenv import load_dotenv
 import os
-import re
-import getpass as getpass
-from typing import Annotated
-from typing_extensions import TypedDict
 from toolsmod import cache_fetcher, edgar_fetcher
-import json
 
 
 def model_init():
-    """Initialize analysis and judge models, prompting for keys if needed."""
+    """Initialize analysis and judge models using environment variables."""
 
     load_dotenv()
+    missing = [key for key in ("OPENAI_API_KEY", "GOOGLE_API_KEY") if not os.environ.get(key)]
+    if missing:
+        raise EnvironmentError(f"Missing required environment variables: {', '.join(missing)}")
 
-    def _set_env(key: str):
-        if not os.environ.get(key):  # This checks for None or an empty string
-            os.environ[key] = getpass.getpass(f"{key}: ")
-
-    _set_env("OPENAI_API_KEY")
-    
-    _set_env("GOOGLE_API_KEY")
-
-    class judge(BaseModel):
+    class Judge(BaseModel):
         """Schema describing the Gemini judge response payload."""
 
         passorfail: str = Field(
@@ -62,88 +48,28 @@ def model_init():
         max_tokens=None,
         timeout=None,
         max_retries=2,
-    ).with_structured_output(judge, method="json_mode")
+    ).with_structured_output(Judge, method="json_mode")
     return model, judge_model
 
 
-class State(TypedDict):
-    """Shared state that flows between LangGraph nodes."""
-
-    # Conversation history that LangGraph expects for message-passing graphs.
-    messages: Annotated[list, add_messages]
-
-    # [ticker, cik, filing_date] tuple returned from the fetch step.
-    stockinfo: list
-
-    # Raw Item 2 content extracted from a 10-Q filing.
-    tenqitem2cont: str
-
-    # Structured JSON report outputs for each analyzer.
-    revenue_report: str
-    revenue_report_exist: str
-
-    cashflow_report: str
-    cashflow_report_exist: str
-
-    debt_report: str
-    debt_report_exist: str
-
-
-def tool_node(state: State):
+def fetch_item2(ticker: str, use_cache: bool = True):
     """Fetch Item 2 content either from cache or directly via EDGAR."""
 
-    # Identify ourselves to the ``edgar`` client before calling remote APIs.
     set_identity("jacob casey jacobrcasey135@gmail.com")
 
-    user_input = input("would you like to use cache mode (y or n): ").lower()
-    if user_input == "y":
-        try:
-            # Attempt to reuse cached filings to reduce EDGAR load/latency.
-            tenqitem2cont, stockinfo = cache_fetcher()
-            state_update = {"stockinfo": stockinfo, "tenqitem2cont": tenqitem2cont}
-            return Command(update=state_update)
-        except Exception:
-            print("error in cache_fetcher using edgar fetcher")
-            try:
-                # Cache missed or failed—fallback to live EDGAR retrieval.
-                tenqitem2cont, stockinfo = edgar_fetcher()
-                state_update = {"stockinfo": stockinfo, "tenqitem2cont": tenqitem2cont}
-                return Command(update=state_update)
-            except Exception:
-                print("error running edgar_fetcher")
-                exit
+    if use_cache:
+        cached = cache_fetcher(ticker)
+        if cached:
+            return cached
 
-    else:
-        print("using fetch mode")
-        try:
-            tenqitem2cont, stockinfo = edgar_fetcher()
-            state_update = {"stockinfo": stockinfo, "tenqitem2cont": tenqitem2cont}
-            return Command(update=state_update)
-        except Exception:
-            print("error in edgar_fetcher")
-            exit
-    return
+    return edgar_fetcher(ticker)
 
-def revenue_llm(state: State):
+
+def revenue_llm(tenqitem2cont: str):
     """Generate the revenue analysis JSON report."""
 
-    stockinfo = state["stockinfo"]
-    path_company_date = f"output/{stockinfo[0]}/{stockinfo[2]}"
-    file_path = f"{path_company_date}/revenue_{stockinfo[2]}.json"
-
-    # Skip regeneration if a validated report already exists on disk.
-    if os.path.exists(file_path):
-        print(f"The path '{file_path}' exists.")
-        revenue_report_exist = "y"
-        state_update = {"revenue_report_exist": revenue_report_exist}
-        return Command(update=state_update)
-    else:
-        print(f"The path '{file_path}' does not exist.")
-
-    tenqitem2cont = state["tenqitem2cont"]
     model, _ = model_init()
 
-    # Prompt captures detailed instructions for how the JSON should be structured.
     msg = [
         HumanMessage(
             content= f"""
@@ -185,31 +111,14 @@ def revenue_llm(state: State):
         )
     ]
 
-    # Invokes the model for the response
-    revenue_report = model.invoke(msg)
+    return model.invoke(msg)
 
-    # State update
-    state_update = {"revenue_report": revenue_report }
-    return Command(update=state_update)
 
-def gemini_judge_revenue(state: State):
-    """Validate the revenue report and persist it if it passes."""
+def gemini_judge_revenue(tenqitem2cont: str, revenue_report):
+    """Validate the revenue report and return the judge response."""
 
-    stockinfo = state["stockinfo"]
-
-    try:
-        revenue_report_exist = state["revenue_report_exist"]
-        if revenue_report_exist == "y":
-            print("skipping judge revenue report already exists")
-            return
-    except Exception:
-        print("entering judge")
-
-    tenqitem2cont = state["tenqitem2cont"]
-    revenue_report = state["revenue_report"]
     _, judge_model = model_init()
 
-    # judge prompt
     msg = [
         HumanMessage(
             content= f"""
@@ -239,61 +148,21 @@ def gemini_judge_revenue(state: State):
         )
     ]
 
-    # model invoke
     revenue_judge_report = judge_model.invoke(msg)
-
-    # debug
-    #print(revenue_judge_report)
-
-    # only grabs the pass or fail object
-    passorfail = revenue_judge_report.passorfail
-
-    if passorfail == 'pass':
-
-        # define dir structure
-        path_company = f"output/{stockinfo[0]}"
-        path_company_date = f"output/{stockinfo[0]}/{stockinfo[2]}"
-        os.makedirs(path_company, exist_ok=True)
-        try:
-            os.mkdir(path_company_date)
-        except FileExistsError:
-            print("file alread exists")
-            pass
-
-        # Writes the json to revenue_date.json to the nested dirs
-        with open(f"{path_company_date}/revenue_{stockinfo[2]}.json", 'w') as f:
-            json.dump(revenue_report, f, indent=4)
-    elif passorfail == 'fail':
-        # if a fail prints the anomalies for analisis 
+    if revenue_judge_report.passorfail == 'fail':
         print("this report has failed")
         print("anomalies:", revenue_judge_report.anomalies)
+    return {
+        "passorfail": revenue_judge_report.passorfail,
+        "anomalies": revenue_judge_report.anomalies,
+    }
 
-    else:
-        # if the model writes something different then "pass" or "fail"
-        print("error in passorfail section of judge json check model formatting")
 
-    return
-    
-
-def cashflow_llm(state: State):
+def cashflow_llm(tenqitem2cont: str):
     """Generate the cashflow analysis JSON report."""
 
-    stockinfo = state["stockinfo"]
-    path_company_date = f"output/{stockinfo[0]}/{stockinfo[2]}"
-    file_path = f"{path_company_date}/cashflow_{stockinfo[2]}.json"
-
-    if os.path.exists(file_path):
-        print(f"The path '{file_path}' exists.")
-        cashflow_report_exist = "y"
-        state_update = {"cashflow_report_exist": cashflow_report_exist}
-        return Command(update=state_update)
-    else:
-        print(f"The path '{file_path}' does not exist.")
-
-    tenqitem2cont = state["tenqitem2cont"]
     model, _ = model_init()
 
-    # cashflow prompt
     msg = [
         HumanMessage(
             content= f"""
@@ -332,31 +201,13 @@ def cashflow_llm(state: State):
         )
     ]
 
-    # model invoke
-    cashflow_report = model.invoke(msg)
-
-    state_update = {"cashflow_report": cashflow_report }
-    return Command(update=state_update)
+    return model.invoke(msg)
 
 
-def gemini_judge_cashflow(state: State):
-    """Validate the cashflow report and write it to disk if approved."""
+def gemini_judge_cashflow(tenqitem2cont: str, cashflow_report):
+    """Validate the cashflow report and return the judge response."""
 
-    stockinfo = state["stockinfo"]
-
-    try:
-        cashflow_report_exist = state["cashflow_report_exist"]
-        if cashflow_report_exist == "y":
-            print("skipping judge cashflow report already exists")
-            return
-    except Exception:
-        print("entering judge")
-
-    tenqitem2cont = state["tenqitem2cont"]
-    cashflow_report = state["cashflow_report"]
     _, judge_model = model_init()
-
-    
 
     msg = [
         HumanMessage(
@@ -388,54 +239,18 @@ def gemini_judge_cashflow(state: State):
     ]
 
     cashflow_judge_report = judge_model.invoke(msg)
-
-    print(cashflow_judge_report)
-
-    passorfail = cashflow_judge_report.passorfail
-
-    if passorfail == 'pass':
-        print("report has passed judging")
-        print("caching and displaying report")
-
-        path_company = f"output/{stockinfo[0]}"
-        path_company_date = f"output/{stockinfo[0]}/{stockinfo[2]}"
-        os.makedirs(path_company, exist_ok=True)
-        try:
-            os.mkdir(path_company_date)
-        except FileExistsError:
-            print("file alread exists")
-            pass
-
-        print(f"Nested directories '{path_company_date}' created (or already exist).")
-        with open(f"{path_company_date}/cashflow_{stockinfo[2]}.json", 'w') as f:
-            json.dump(cashflow_report, f, indent=4)
-    elif passorfail == 'fail':
+    if cashflow_judge_report.passorfail == 'fail':
         print("this report has failed")
         print("anomalies:", cashflow_judge_report.anomalies)
+    return {
+        "passorfail": cashflow_judge_report.passorfail,
+        "anomalies": cashflow_judge_report.anomalies,
+    }
 
-    else:
-        print("error in passorfail section of judge json check model formatting")
 
-    return
-
-def debt_llm(state: State):
+def debt_llm(tenqitem2cont: str):
     """Generate the debt analysis JSON report."""
 
-    print("entered debt LLM")
-
-    stockinfo = state["stockinfo"]
-    path_company_date = f"output/{stockinfo[0]}/{stockinfo[2]}"
-    file_path = f"{path_company_date}/debt_{stockinfo[2]}.json"
-
-    if os.path.exists(file_path):
-        print(f"The path '{file_path}' exists.")
-        debt_report_exist = "y"
-        state_update = {"debt_report_exist": debt_report_exist}
-        return Command(update=state_update)
-    else:
-        print(f"The path '{file_path}' does not exist.")
-
-    tenqitem2cont = state["tenqitem2cont"]
     model, _ = model_init()
 
     msg = [
@@ -475,28 +290,11 @@ def debt_llm(state: State):
         )
     ]
 
-    
-    debt_report = model.invoke(msg)
-    
-    state_update = {"debt_report": debt_report }
+    return model.invoke(msg)
 
-    return Command(update=state_update)
 
-def gemini_judge_debt(state: State):
-    """Validate the debt report before it is cached."""
-
-    stockinfo = state["stockinfo"]
-
-    try:
-        debt_report_exist = state["debt_report_exist"]
-        if debt_report_exist == "y":
-            print("skipping judge debt report already exists")
-            return
-    except Exception:
-        print("entering judge")
-
-    tenqitem2cont = state["tenqitem2cont"]
-    debt_report = state["debt_report"]
+def gemini_judge_debt(tenqitem2cont: str, debt_report):
+    """Validate the debt report and return the judge response."""
 
     _, judge_model = model_init()
 
@@ -530,64 +328,40 @@ def gemini_judge_debt(state: State):
     ]
 
     debt_judge_report = judge_model.invoke(msg)
-
-    passorfail = debt_judge_report.passorfail
-
-    if passorfail == 'pass':
-        print("report has passed judging")
-        print("caching and displaying report")
-        
-        path_company = f"output/{stockinfo[0]}"
-        path_company_date = f"output/{stockinfo[0]}/{stockinfo[2]}"
-        os.makedirs(path_company, exist_ok=True)
-        try:
-            os.mkdir(path_company_date)
-        except FileExistsError:
-            print("file alread exists")
-            pass
-        print(f"Nested directories '{path_company_date}' created (or already exist).")
-        with open(f"{path_company_date}/debt_{stockinfo[2]}.json", 'w') as f:
-            json.dump(debt_report, f, indent=4)
-    elif passorfail == 'fail':
+    if debt_judge_report.passorfail == 'fail':
         print("this report has failed")
         print("anomalies:", debt_judge_report.anomalies)
+    return {
+        "passorfail": debt_judge_report.passorfail,
+        "anomalies": debt_judge_report.anomalies,
+    }
 
-    else:
-        print("error in passorfail section of judge json check model formatting")
 
-    return
+def run_orgvsinorg(ticker: str, use_cache: bool = True) -> dict:
+    """Run the full analysis pipeline for ``ticker``."""
 
+    fetched = fetch_item2(ticker, use_cache=use_cache)
+    if not fetched:
+        return {}
 
-def main():
-    """Build and run the sequential LangGraph pipeline indefinitely."""
+    tenqitem2cont, stockinfo = fetched
 
-    graph_builder = StateGraph(State)
+    revenue_report = revenue_llm(tenqitem2cont)
+    gemini_judge_revenue(tenqitem2cont, revenue_report)
 
-    # Register every node that participates in the workflow.
-    graph_builder.add_node("revenue_llm", revenue_llm)
-    graph_builder.add_node("tool", tool_node)
-    graph_builder.add_node("gemini_judge_revenue", gemini_judge_revenue)
-    graph_builder.add_node("cashflow_llm", cashflow_llm)
-    graph_builder.add_node("gemini_judge_cashflow", gemini_judge_cashflow)
-    graph_builder.add_node("debt_llm", debt_llm)
-    graph_builder.add_node("gemini_judge_debt", gemini_judge_debt)
+    cashflow_report = cashflow_llm(tenqitem2cont)
+    gemini_judge_cashflow(tenqitem2cont, cashflow_report)
 
-    graph_builder.set_entry_point("tool")
+    debt_report = debt_llm(tenqitem2cont)
+    gemini_judge_debt(tenqitem2cont, debt_report)
 
-    # Simple linear path from data acquisition through every report + judge.
-    graph_builder.add_edge("tool", "revenue_llm")
-    graph_builder.add_edge("revenue_llm", "gemini_judge_revenue")
-    graph_builder.add_edge("gemini_judge_revenue", "cashflow_llm")
-    graph_builder.add_edge("cashflow_llm", "gemini_judge_cashflow")
-    graph_builder.add_edge("gemini_judge_cashflow", "debt_llm")
-    graph_builder.add_edge("debt_llm", "gemini_judge_debt")
-    graph_builder.add_edge("gemini_judge_debt", END)
-
-    graph = graph_builder.compile()
-
-    while True:
-        graph.invoke({"messages": ["Init graph"]})
+    return {
+        "revenue": revenue_report,
+        "cashflow": cashflow_report,
+        "debt": debt_report,
+        "stockinfo": stockinfo,
+    }
 
 
 if __name__ == "__main__":
-    result = main()
+    print(run_orgvsinorg("aapl", use_cache=True))

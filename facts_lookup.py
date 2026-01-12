@@ -1,7 +1,6 @@
-"""Interactive helper to fetch and summarize SEC company facts for one ticker."""
+"""Fetch and summarize SEC company facts for one ticker."""
 
 import json
-import os
 import re
 
 import requests
@@ -415,14 +414,14 @@ def run_years(start_year, eps_json, cashflow_json, revenue_json, all_frame_rev):
     return eps_json, cashflow_json, revenue_json
 
 
-def process_ticker(user_input: str):
-    """Process a single ticker request without exiting the program."""
+def run_facts_lookup(ticker: str) -> dict:
+    """Return EPS, cashflow, and revenue summaries for ``ticker``."""
 
     global eps_diluted, operating_cashflow, start_year
 
-    user_input = user_input.lower().strip()
+    user_input = ticker.lower().strip()
     if not user_input:
-        return False
+        return {}
 
     # ``company_tickers.json`` includes every CIK; scan until we locate the
     # requested symbol so we can construct the API URL below.
@@ -435,7 +434,7 @@ def process_ticker(user_input: str):
             break
     if cik is None:
         print(f"Ticker '{user_input}' not found.")
-        return False
+        return {}
 
     url = f"https://data.sec.gov/api/xbrl/companyfacts/CIK{cik}.json"
     response = requests.request("GET", url, headers=headers, data=payload)
@@ -467,31 +466,12 @@ def process_ticker(user_input: str):
         all_frame_rev,
     )
 
-    path_company = f"output/{current_ticker}-facts-json"
-    os.makedirs(path_company, exist_ok=True)
-    try:
-        os.mkdir(path_company)
-    except FileExistsError:
-        #print("file alread exists")
-        pass
-
-    with open(f"{path_company}/epsd_{current_ticker}.json", 'w') as f:
-        json.dump(eps_json, f, indent=4)
-    with open(f"{path_company}/cash_{current_ticker}.json", 'w') as f:
-        json.dump(cashflow_json, f, indent=4)
-    with open(f"{path_company}/rev_{current_ticker}.json", 'w') as f:
-        json.dump(revenue_json, f, indent=4)
-    print(f"Finished processing {current_ticker}.")
-    return True
-
-
-def main():
-    while True:
-        user_input = input("enter ticker (or 'q' to quit): ")
-        if user_input.lower().strip() in ("q", "quit", "exit", ""):
-            break
-        process_ticker(user_input)
+    return {
+        "eps": eps_json,
+        "cashflow": cashflow_json,
+        "revenue": revenue_json,
+    }
 
 
 if __name__ == "__main__":
-    main()
+    print(run_facts_lookup("aapl"))

@@ -7,74 +7,56 @@ from edgar import Company
 
 
 ## tools
-def cache_fetcher():
-    """Let a user search the local cache for a previously downloaded 10-Q."""
+def cache_fetcher(ticker: str, cache_dir: str = "cache"):
+    """Return cached Item 2 data for ``ticker`` if a local snapshot exists."""
 
-    directory_path = "cache"
-    while True:
-        # Allow the user to narrow down cached filings by fuzzy matching the
-        # filename (which contains the company name and filing metadata).
-        search_term = input("enter the name of the company you are looking for: ")  # The term to search for in file names
-        print(f"Files containing '{search_term}' in '{directory_path}':")
-        x = 0
-        cache_list = []
-        try:
-            # Build an index of matching files while remembering their display
-            # order so the user can select them by number.
-            for item in os.listdir(directory_path):
-                full_path = os.path.join(directory_path, item)
-                if os.path.isfile(full_path) and search_term.lower() in item.lower():
-                    x += 1
-                    print(item,"number:", x)
-                    cache_list += [item]
-        except:
-            print("error getting cache list")
-            exit
-            
-        user_input = input("are any of these the file you where looking for? (y, n or q to quit): ").lower()
-        if user_input == "y":
-            break
-        elif user_input == "n":
-            continue
-        else:
-            print("invalid input")
-            continue
-    user_input = int(input("what form would you like to use? (num: 1, 2, 3, type 0 to exit to fetch mode)?: "))
-    user_input = user_input - 1
-    if user_input == -1:
-        return
-    stockinfo = []
-    # Filenames follow ``Company_Form_Date.json``; split the parts so callers
-    # can present the metadata alongside the filing contents.
-    stockinfo = cache_list[user_input].split('_')
-    stockinfo[2] = stockinfo[2].replace(".json", "")
-    with open(f"{directory_path}/{cache_list[user_input]}", 'r') as f:
+    if not ticker:
+        return None
+    search_term = ticker.lower()
+    cache_list = []
+    try:
+        for item in os.listdir(cache_dir):
+            full_path = os.path.join(cache_dir, item)
+            if os.path.isfile(full_path) and search_term in item.lower():
+                cache_list.append(item)
+    except FileNotFoundError:
+        return None
+
+    if not cache_list:
+        return None
+
+    cache_list.sort()
+    filename = cache_list[-1]
+    stockinfo = filename.split('_')
+    if len(stockinfo) >= 3:
+        stockinfo[2] = stockinfo[2].replace(".json", "")
+
+    with open(f"{cache_dir}/{filename}", 'r') as f:
         tenq = json.load(f)
     tenqitem2 = tenq['item 2']
     tenqitem2cont = tenqitem2['contents']
-    #debug
-    #print(tenqitem2cont)
 
     return tenqitem2cont, stockinfo
 
-def edgar_fetcher():
-    """Fetch the latest 10-Q via ``edgar`` and cache it for reuse."""
+def edgar_fetcher(ticker: str, filing_date: str | None = None):
+    """Fetch a 10-Q via ``edgar`` and return Item 2 data without prompts."""
 
-    while True:
-        # Keep asking for a ticker until the user confirms we located the
-        # correct company.
-        ticker = input("please enter the ticker symbol of the company you are looking for: ").lower()
-        app = Company(ticker)
-        forms = app.get_filings(form="10-Q")
-        print(forms)
-        user_input = input("is this the stock you where looking for? (y, n): ")
-        if user_input == "y":
-            break
-        else:
-            print("please try your ticker again")
-            pass
-    
-    latest10q = forms.latest()
+    if not ticker:
+        return None
+    ticker = ticker.lower()
+    app = Company(ticker)
+    forms = app.get_filings(form="10-Q")
+
+    if filing_date:
+        latest10q = None
+        for filing in forms:
+            if str(filing.filing_date) == filing_date:
+                latest10q = filing
+                break
+        if latest10q is None:
+            latest10q = forms.latest()
+    else:
+        latest10q = forms.latest()
     try:
         tenq = latest10q.obj()
     except:
@@ -124,15 +106,6 @@ def edgar_fetcher():
 
     }
     
-    # Store a JSON snapshot locally so that repeated lookups do not have to
-    # hit the network.
-    path = f"cache/{latest10q.company}_{latest10q.form}_{latest10q.filing_date}.json"
-    if os.path.exists(path):
-        # Reuse the existing snapshot to avoid duplicating files.
-        pass
-    else:
-        with open(f"{path}", 'w') as f:
-            json.dump(tenqjson, f, indent=4)
     tenqitem2 = tenqjson['item 2']
     tenqitem2cont = tenqitem2['contents']
     
