@@ -132,6 +132,9 @@ You can point it at a different host/port by setting `API_BASE_URL`, e.g.:
 API_BASE_URL="http://localhost:8000" ./scripts/smoke_test.sh
 ```
 
+Use `http://` unless you have TLS configured; `https://localhost:8000` will fail
+with SSL errors because uvicorn is serving plain HTTP by default.
+
 The smoke test script will also load `.env` from the repo root if it exists, so
 you can keep `PYTHON_API_TOKEN` and `API_BASE_URL` there instead of exporting
 them in every terminal session. You can override the path with `ENV_PATH`, e.g.

@@ -14,6 +14,15 @@ fi
 
 API_BASE_URL="${API_BASE_URL:-http://localhost:8000}"
 
+if [[ ! "${API_BASE_URL}" =~ ^https?:// ]]; then
+  API_BASE_URL="http://${API_BASE_URL}"
+fi
+
+if [[ "${API_BASE_URL}" =~ ^https://(localhost|127\.0\.0\.1)(:|/|$) ]]; then
+  echo "Detected HTTPS localhost URL without TLS; switching to HTTP." >&2
+  API_BASE_URL="${API_BASE_URL/https:\/\//http:\/\/}"
+fi
+
 if [[ -z "${PYTHON_API_TOKEN:-}" ]]; then
   echo "PYTHON_API_TOKEN is required for the smoke test." >&2
   exit 1
