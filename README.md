@@ -132,6 +132,7 @@ You can point it at a different host/port by setting `API_BASE_URL`, e.g.:
 API_BASE_URL="http://localhost:8000" ./scripts/smoke_test.sh
 ```
 
-The smoke test script will also load `.env` if it exists, so you can keep
-`PYTHON_API_TOKEN` and `API_BASE_URL` there instead of exporting them in every
-terminal session.
+The smoke test script will also load `.env` from the repo root if it exists, so
+you can keep `PYTHON_API_TOKEN` and `API_BASE_URL` there instead of exporting
+them in every terminal session. You can override the path with `ENV_PATH`, e.g.
+`ENV_PATH=/path/to/.env ./scripts/smoke_test.sh`.
