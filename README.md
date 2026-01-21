@@ -1,8 +1,7 @@
 # AI Financial FastAPI Service
 
-FastAPI wrapper around the existing SEC facts lookup and 10‑Q analysis scripts.
-The service exposes two POST endpoints that return JSON-only responses and
-requires a Bearer token on every request.
+FastAPI wrapper around the existing SEC facts lookup and 10‑Q analysis scripts,
+now with Celery + Redis background processing and shared Postgres persistence.
 
 ## Requirements
 
@@ -10,10 +9,12 @@ requires a Bearer token on every request.
 - Required environment variables:
   - `OPENAI_API_KEY`
   - `GOOGLE_API_KEY`
-  - `PYTHON_API_TOKEN` (any strong random string you generate)
-- Optional environment variable:
-  - `SEC_USER_AGENT` (defaults to the existing in-code SEC user agent string)
-  - `API_BASE_URL` (optional default for the smoke test script)
+  - `PYTHON_API_TOKEN`
+  - `DATABASE_URL` (same Postgres used by the Next.js/Prisma app)
+  - `CELERY_BROKER_URL` (Redis connection string)
+- Optional:
+  - `SEC_USER_AGENT` (overrides default SEC user agent)
+  - `API_BASE_URL` (used by the smoke test script)
 
 ## Run locally
 
@@ -25,10 +26,14 @@ pip install -r requirements.txt
 export OPENAI_API_KEY="sk-..."
 export GOOGLE_API_KEY="AIza..."
 export PYTHON_API_TOKEN="local-dev-token"
+export DATABASE_URL="postgres://user:pass@localhost:5432/ai_financial"
+export CELERY_BROKER_URL="redis://localhost:6379/0"
 export SEC_USER_AGENT="your name you@example.com"
 export API_BASE_URL="http://localhost:8000"
 
-uvicorn app:app --host 0.0.0.0 --port 8000
+uvicorn app.main:app --host 0.0.0.0 --port 8000
+# in another terminal
+celery -A app.celery_app.celery worker --loglevel=INFO --concurrency=1
 ```
 
 ## Docker
@@ -39,9 +44,24 @@ docker run -p 8000:8000 \
   -e OPENAI_API_KEY="sk-..." \
   -e GOOGLE_API_KEY="AIza..." \
   -e PYTHON_API_TOKEN="local-dev-token" \
+  -e DATABASE_URL="postgres://user:pass@postgres:5432/ai_financial" \
+  -e CELERY_BROKER_URL="redis://redis:6379/0" \
   -e SEC_USER_AGENT="your name you@example.com" \
   ai-financial-service
 ```
+
+## Local dev with Docker Compose
+
+```bash
+cp .env.example .env  # create .env with your secrets (OPENAI_API_KEY, etc.)
+docker-compose up --build api worker
+```
+
+Services started:
+- Postgres (service `postgres`)
+- Redis (service `redis`)
+- FastAPI web (`api`, port 8000)
+- Celery worker (`worker`) consuming from Redis and writing to Postgres
 
 ## Authentication
 
@@ -51,74 +71,37 @@ Every request must include:
 Authorization: Bearer <PYTHON_API_TOKEN>
 ```
 
-Missing or invalid tokens return HTTP 401.
-Generate a token however you like (for example, `python -c "import secrets; print(secrets.token_urlsafe(32))"`), set it in `PYTHON_API_TOKEN`, and use the same value in your `Authorization` header.
-
 ## API
 
 ### POST /analysis/facts
-
-Request:
-
 ```json
-{
-  "ticker": "aapl"
-}
-```
-
-Response:
-
-```json
-{
-  "eps": { "...": "..." },
-  "cashflow": { "...": "..." },
-  "revenue": { "...": "..." }
-}
-```
-
-Example:
-
-```bash
-curl -X POST http://localhost:8000/analysis/facts \
-  -H "Authorization: Bearer local-dev-token" \
-  -H "Content-Type: application/json" \
-  -d '{"ticker":"aapl"}'
+{ "ticker": "aapl" }
 ```
 
 ### POST /analysis/insights
-
-Request:
-
 ```json
-{
-  "ticker": "aapl",
-  "useCache": true
-}
+{ "ticker": "aapl", "useCache": true }
 ```
 
-Response:
-
+### POST /jobs/enqueue
 ```json
-{
-  "revenue": { "...": "..." },
-  "cashflow": { "...": "..." },
-  "debt": { "...": "..." },
-  "stockinfo": []
-}
+{ "jobId": "<existing analysis_jobs id>" }
 ```
+Returns 202 after placing a Celery message on Redis.
 
-Example:
+### GET /jobs/{jobId}
+Token-protected debug endpoint that returns the raw `analysis_jobs` row.
 
-```bash
-curl -X POST http://localhost:8000/analysis/insights \
-  -H "Authorization: Bearer local-dev-token" \
-  -H "Content-Type: application/json" \
-  -d '{"ticker":"aapl","useCache":true}'
-```
+## Background processing (Celery)
+
+- Broker: Redis (`CELERY_BROKER_URL`); no Postgres polling.
+- Worker command: `celery -A app.celery_app.celery worker --loglevel=INFO --concurrency=1`
+- Task: `run_analysis_job` reads the job row, checks `analysis_storage.new_data`;
+  reuses cached outputs when possible; otherwise runs facts/insights directly
+  (no HTTP round trips) and upserts results inside an advisory-locked
+  transaction.
 
 ## Smoke test script
-
-Run the included smoke test script after the API server is running:
 
 ```bash
 export PYTHON_API_TOKEN="local-dev-token"
@@ -126,16 +109,14 @@ export API_BASE_URL="http://localhost:8000"
 ./scripts/smoke_test.sh
 ```
 
-You can point it at a different host/port by setting `API_BASE_URL`, e.g.:
+## Render deployment notes
 
-```bash
-API_BASE_URL="http://localhost:8000" ./scripts/smoke_test.sh
-```
-
-Use `http://` unless you have TLS configured; `https://localhost:8000` will fail
-with SSL errors because uvicorn is serving plain HTTP by default.
-
-The smoke test script will also load `.env` from the repo root if it exists, so
-you can keep `PYTHON_API_TOKEN` and `API_BASE_URL` there instead of exporting
-them in every terminal session. You can override the path with `ENV_PATH`, e.g.
-`ENV_PATH=/path/to/.env ./scripts/smoke_test.sh`.
+- Web service command: `uvicorn app.main:app --host 0.0.0.0 --port 8000`
+- Add a Background Worker service:
+  `celery -A app.celery_app.celery worker --loglevel=INFO --concurrency=1`
+- Add a Render Key Value instance (Redis) and set `CELERY_BROKER_URL` to its
+  internal URL.
+- Share the same Postgres `DATABASE_URL` between web and worker so results land
+  in Prisma tables (`analysis_jobs`, `analysis_storage`).
+- Shared env vars: `OPENAI_API_KEY`, `GOOGLE_API_KEY`, `PYTHON_API_TOKEN`,
+  `DATABASE_URL`, `CELERY_BROKER_URL`, optional `SEC_USER_AGENT`.
