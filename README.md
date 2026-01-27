@@ -13,7 +13,6 @@ requires a Bearer token on every request.
   - `PYTHON_API_TOKEN` (any strong random string you generate)
 - Optional environment variable:
   - `SEC_USER_AGENT` (defaults to the existing in-code SEC user agent string)
-  - `API_BASE_URL` (optional default for the smoke test script)
 
 ## Run locally
 
@@ -30,6 +29,11 @@ export API_BASE_URL="http://localhost:8000"
 
 uvicorn app:app --host 0.0.0.0 --port 8000
 ```
+
+Open:
+
+- http://localhost:8000/docs (Swagger UI)
+- http://localhost:8000/openapi.json
 
 ## Docker
 
